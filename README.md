@@ -1,3 +1,9 @@
+Create a .env with
+```
+IP=YOUR_IP
+PORT=YOUR_PORT
+```
+
 ```
 git clone https://github.com/Medicean/VulApps.git
 cd VulApps/s/struts2/s2-045
