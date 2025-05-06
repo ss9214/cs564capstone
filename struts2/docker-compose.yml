@@ -1,6 +1,0 @@
-version: '2'
-services:
-  struts2:
-    image: medicean/vulapps:s_struts2_s2-045
-    ports:
-      - "8080:8080"
