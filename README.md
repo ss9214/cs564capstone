@@ -3,7 +3,7 @@ Create a .env with
 IP=192.168.65.254 (docker ip)
 PORT=4444
 ```
-
+Run:
 ```
 docker pull medicean/vulapps:s_struts2_s2-045
 docker run -d -p 80:8080 medicean/vulapps:s_struts2_s2-045
