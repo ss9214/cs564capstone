@@ -6,7 +6,7 @@ PORT=4444
 Run:
 ```
 docker pull medicean/vulapps:s_struts2_s2-045
-docker run -d -p 80:8080 medicean/vulapps:s_struts2_s2-045
+docker run -d -p 8080:8080 medicean/vulapps:s_struts2_s2-045
 ```
 ```
 In powershell:
