@@ -3,9 +3,9 @@ import socket
 import threading
 import time
 
-XOR_KEY = 0x55
-HOST = '0.0.0.0'
-PORT = 4444
+XOR_KEY = hex(int(os.getenv('XOR_KEY'), 16))
+HOST = os.getenv('HOST')
+PORT = int(os.getenv('PORT'))
 task_counter = 0
 tasks = {}
 
