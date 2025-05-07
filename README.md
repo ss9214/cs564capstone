@@ -1,1 +1,1 @@
-Team Cipher cs564 Capstone Project
+# Team Cipher CS564 Capstone Project
