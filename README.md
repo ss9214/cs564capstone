@@ -39,3 +39,14 @@ Behaviors:
 
 Compiled in WSL: gcc -o implant -O3 -fno-stack-protector -z execstack -static implant_client.c
 
+# Obfuscation Techniques
+- Implant precompiled in C with optimizations to make reversing difficult
+-  Implant hidden in /usr/bin/ directory to avoid detection
+-  .env file used to keep IP and port hidden
+-  Named implant syslogd to be inconspicuous
+-  Scripts clean themselves up after execution
+-  C2 Commands hidden with XOR obfuscation
+-  Exfiltration data and files also hidden with XOR obfuscation
+-  Self-destruct command to delete all files related to the implant, including the implant, and end the connection
+
+
